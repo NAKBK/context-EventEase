@@ -300,8 +300,8 @@ Repository for every task: **frontend** (URL `NEEDS DECISION`). Each task is one
 - **Branch:** `feature/FE-007-venue-map`
 - **Owner:** FE developer or AI agent
 - **Priority:** P2
-- **Dependencies:** FE-001 (HARD); BE-008 (SOFT)
-- **Can run in parallel:** Yes, with BE-008 and other FE page tasks
+- **Dependencies:** FE-001 (HARD); BE-002 (SOFT, venue `lat`/`lng`)
+- **Can run in parallel:** Yes, with BE-002 and other FE page tasks
 
 **Goal:** show venue location on a map when coordinates are available.
 

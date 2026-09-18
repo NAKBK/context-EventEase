@@ -72,10 +72,12 @@ Repository for every task: **backend** (local project `../BE-EventEase/`; remote
 - role-scoped event list/detail.
 - organizer event creation.
 - query validation and provenance.
+- optional `lat`/`lng` on `Venue`, for later map rendering (P2, FE-007): nullable columns, accepted on event creation, returned in venue objects, range-validated when present.
 
 ### Outside scope
 
 - matching, import, route graph, ticketing.
+- routing, distance calculation, live navigation from coordinates.
 
 ### Implementation steps
 
@@ -84,10 +86,11 @@ Repository for every task: **backend** (local project `../BE-EventEase/`; remote
 3. event and claim creation transaction.
 4. ownership from token.
 5. list/detail projections.
+6. migration adding nullable `lat`/`lng` columns on `Venue`; accept them optionally on `POST /api/events`; return them (or `null`) on list/detail/create; validate `lat` in [-90,90] and `lng` in [-180,180] when present, else 422.
 
 ### API and context
 
-- BE-API-002–005, 007.
+- BE-API-002–005, 007; venue coordinate extension in `../shared/API.md`.
 
 ### Acceptance criteria
 
@@ -95,15 +98,17 @@ Repository for every task: **backend** (local project `../BE-EventEase/`; remote
 - two seeded events list.
 - organizer creates event and attendee reads it.
 - invalid claims/dates and wrong role use contract error envelope.
+- a venue with coordinates round-trips; a venue without coordinates returns `null`, not an error; an out-of-range coordinate returns 422.
 
 ### Definition of done
 
-- global DoD, no unauthenticated write, no invented claim value.
+- global DoD, no unauthenticated write, no invented claim value, no coordinate ever fabricated for a venue that lacks real data.
 
 ### Verification
 
 - HTTP success and 401/403/404/422 cases.
 - database round-trip and clean seed check.
+- HTTP create/read with and without coordinates; invalid coordinate range rejected with 422.
 
 ## BE-003 — Weighted match engine
 
@@ -248,7 +253,7 @@ Repository for every task: **backend** (local project `../BE-EventEase/`; remote
 - **Owner:** BE developer or AI agent
 - **Priority:** P1
 - **Dependencies:** BE-001 (HARD)
-- **Can run in parallel:** Yes, with BE-007/008/009/010
+- **Can run in parallel:** Yes, with BE-007/009/010
 
 **Goal:** allow real user signup/login alongside demo accounts.
 
@@ -298,7 +303,7 @@ Repository for every task: **backend** (local project `../BE-EventEase/`; remote
 - **Owner:** BE developer or AI agent
 - **Priority:** P1
 - **Dependencies:** BE-002 (HARD)
-- **Can run in parallel:** Yes, with BE-006/008/009/010
+- **Can run in parallel:** Yes, with BE-006/009/010
 
 **Goal:** import a validated subset of DKI Jakarta open venue/event data with provenance.
 
@@ -342,67 +347,20 @@ Repository for every task: **backend** (local project `../BE-EventEase/`; remote
 - run twice and confirm idempotency.
 - spot check one mapped and one unmapped field.
 
-## BE-008 — Venue coordinates
-
-- **Branch:** `feature/BE-008-venue-coordinates`
-- **Owner:** BE developer or AI agent
-- **Priority:** P2
-- **Dependencies:** BE-002 (HARD)
-- **Can run in parallel:** Yes, with BE-006/007/009/010
-
-**Goal:** let venues carry optional geographic coordinates for map rendering.
-
-### Scope
-
-- optional `lat`/`lng` columns on `Venue` plus migration.
-- accept optional coordinates on event creation (BE-API-007).
-- return coordinates in venue objects on BE-API-004/005/007 (`null` when absent).
-- range validation when present.
-
-### Outside scope
-
-- routing, distance calculation, live navigation.
-
-### Implementation steps
-
-1. migration adding nullable `lat`/`lng` columns.
-2. accept optional `lat`/`lng` on the `POST /api/events` venue payload.
-3. return `lat`/`lng` on venue objects across list/detail/create responses.
-4. validate `lat` in [-90,90] and `lng` in [-180,180] when present, else 422.
-
-### API and context
-
-- BE-API-004/005/007 venue coordinate extension in `../shared/API.md`.
-
-### Acceptance criteria
-
-- a venue with coordinates round-trips.
-- a venue without coordinates returns `null`, not an error.
-- an out-of-range coordinate returns 422.
-
-### Definition of done
-
-- global DoD, no coordinate ever fabricated for a venue that lacks real data.
-
-### Verification
-
-- HTTP create/read with and without coordinates.
-- invalid range rejected with 422.
-
 ## BE-009 — Claim evidence media upload
 
 - **Branch:** `feature/BE-009-media-upload`
 - **Owner:** BE developer or AI agent
 - **Priority:** P2
 - **Dependencies:** BE-002 (HARD)
-- **Can run in parallel:** Yes, with BE-006/007/008/010
+- **Can run in parallel:** Yes, with BE-006/007/010
 
 **Goal:** let organizers attach photo evidence to accessibility claims.
 
 ### Scope
 
 - multipart upload endpoint.
-- file storage behind a storage interface (local disk for demo, or object storage).
+- Supabase Storage as the file backend, behind a thin storage client (`app/core/storage.py`).
 - one-to-many media items per event.
 - media list surfaced in event detail.
 - content-type/size validation.
@@ -413,15 +371,16 @@ Repository for every task: **backend** (local project `../BE-EventEase/`; remote
 
 ### Implementation steps
 
-1. choose storage (local disk for demo, or S3-compatible) behind a storage interface.
+1. use Supabase Storage via `app/core/storage.py` (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET` env vars; bucket created as Public in the Supabase dashboard).
 2. `POST /api/events/{event_id}/media` multipart endpoint, owning organizer only.
-3. persist media metadata (`url`, `uploaded_at`, uploader) linked to the event.
+3. persist media metadata (`url`, `uploaded_at`, uploader) linked to the event; `url` is the Supabase Storage public URL.
 4. include the `media` array in the BE-API-005 event detail response.
 5. validate content-type (image only) and max size.
 
 ### API and context
 
 - BE-API-017; extends BE-API-005 response with a `media` array.
+- Env/config: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET` in `.env.example`.
 
 ### Acceptance criteria
 
@@ -444,7 +403,7 @@ Repository for every task: **backend** (local project `../BE-EventEase/`; remote
 - **Owner:** BE developer or AI agent
 - **Priority:** P2
 - **Dependencies:** BE-003 (SOFT)
-- **Can run in parallel:** Yes, with BE-006/007/008/009
+- **Can run in parallel:** Yes, with BE-006/007/009
 
 **Goal:** let attendees find events matching more specific criteria than status/text.
 

@@ -70,7 +70,7 @@ These tasks extend the product after the P0 Need→Match→Commit→Verify loop 
 | --- | --- | --- | --- |
 | BE-006 / FE-006 | Real registration and login | P1 | BE-001 / FE-001 |
 | BE-007 | Jakarta open data import | P1 | BE-002 |
-| BE-008 / FE-007 | Venue coordinates and map rendering | P2 | BE-002 / FE-001 |
+| BE-002 (extended) / FE-007 | Venue coordinates and map rendering | P2 | BE-002 / FE-001 |
 | BE-009 / FE-008 | Claim evidence media upload | P2 | BE-002 / FE-003 |
 | BE-010 / FE-009 | Advanced event search | P2 | BE-003 / FE-002 |
 
