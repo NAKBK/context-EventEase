@@ -453,7 +453,7 @@ Repository for every task: **backend** (local project `../BE-EventEase/`; remote
 - **Priority:** P2
 - **Dependencies:** BE-002 (HARD); BE-003 (HARD); BE-004 (HARD)
 - **Can run in parallel:** Yes, with BE-007/009
-- **Local status:** Planned; full contract and design record in `BE-EventEase/docs/plans/be-api-019-attendee-dashboard.md`. Not implemented yet.
+- **Local status:** Implemented; composes existing `accessibility_requests`/`events` reads and the BE-API-006 match formula only, no new business logic, pass automated tests (`tests/test_be011.py`).
 
 **Goal:** let the attendee dashboard screen load in one call instead of an N+1 fan-out over existing endpoints.
 

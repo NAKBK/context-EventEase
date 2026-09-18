@@ -908,7 +908,7 @@ Example: `GET /api/events?elevator_or_ramp=1&sort=match_score` → BE-API-004 sh
 
 ### BE-API-019 — Attendee dashboard summary
 
-**Status:** planned, not yet implemented (see BE-011).
+**Status:** implemented (BE-011).
 
 **Method/path/purpose:**
 
