@@ -63,6 +63,7 @@ Repository for every task: **backend** (local project `../BE-EventEase/`; remote
 - **Priority:** P0
 - **Dependencies:** BE-001 (HARD)
 - **Can run in parallel:** Yes, with FE-002/003
+- **Local status:** Implemented; needs/events endpoints, role checks, and coordinate validation pass automated tests (`tests/test_be002.py`). Fixed post-merge: needs endpoints now correctly restricted to attendee bearer, and organizer registration (BE-006) auto-provisions an Organizer profile so real accounts can publish events.
 
 **Goal:** persist functional needs and organizer claims.
 
@@ -254,6 +255,7 @@ Repository for every task: **backend** (local project `../BE-EventEase/`; remote
 - **Priority:** P1
 - **Dependencies:** BE-001 (HARD)
 - **Can run in parallel:** Yes, with BE-007/009/010
+- **Local status:** Implemented; migration, register, login, and existing demo-login/bearer checks pass.
 
 **Goal:** allow real user signup/login alongside demo accounts.
 
@@ -404,6 +406,7 @@ Repository for every task: **backend** (local project `../BE-EventEase/`; remote
 - **Priority:** P2
 - **Dependencies:** BE-003 (SOFT)
 - **Can run in parallel:** Yes, with BE-006/007/009
+- **Local status:** Implemented; exact-match facility filters, date range, and `sort=match_score` (reusing BE-003's `_compute_match`) pass automated tests (`tests/test_be010.py`). Unknown query keys now correctly return 422 instead of being silently ignored, closing a pre-existing gap in BE-API-004 itself.
 
 **Goal:** let attendees find events matching more specific criteria than status/text.
 
@@ -442,3 +445,50 @@ Repository for every task: **backend** (local project `../BE-EventEase/`; remote
 
 - HTTP query combinations.
 - ordering assertions against known seeded claims.
+
+## BE-011 — Attendee dashboard summary
+
+- **Branch:** `feature/BE-011-attendee-dashboard`
+- **Owner:** BE developer or AI agent
+- **Priority:** P2
+- **Dependencies:** BE-002 (HARD); BE-003 (HARD); BE-004 (HARD)
+- **Can run in parallel:** Yes, with BE-007/009
+- **Local status:** Planned; full contract and design record in `BE-EventEase/docs/plans/be-api-019-attendee-dashboard.md`. Not implemented yet.
+
+**Goal:** let the attendee dashboard screen load in one call instead of an N+1 fan-out over existing endpoints.
+
+### Scope
+
+- one read-only endpoint composing existing services: pending-request count, the single "active" upcoming event (if any) with its match score, and a capped recent-requests list.
+- reuses the BE-API-006 match formula and the BE-API-009 request item shape exactly; introduces no new scoring or request logic.
+
+### Outside scope
+
+- an organizer-facing dashboard.
+- any personal, cross-event "accessibility score" independent of one specific event.
+- real-time/push updates.
+
+### Implementation steps
+
+1. new module composing `accessibility_requests`, `events`, and the match-scoring path — no duplicated business logic.
+2. define "active event" as: among the attendee's `confirmed` requests, the one whose event is still `upcoming`, soonest `starts_at` first; a `confirmed` request whose event has since completed is excluded (it belongs to verification, not "next event").
+3. mount at `GET /api/me/dashboard`, attendee bearer only.
+
+### API and context
+
+- BE-API-019.
+
+### Acceptance criteria
+
+- no requests at all → `pending_requests_count:0`, `active_event:null`, `recent_requests:[]`.
+- `active_event.match.score` is identical to calling BE-API-006 directly for the same event and attendee.
+- a `confirmed` request on a now-completed event never appears as `active_event`.
+- organizer bearer → 403 `FORBIDDEN`.
+
+### Definition of done
+
+- global DoD; this endpoint never computes a score or request shape independently — it only calls the existing implementations.
+
+### Verification
+
+- HTTP: empty state, pending-only, confirmed-on-upcoming with score cross-check, confirmed-on-completed exclusion, multiple-confirmed picks soonest, organizer 403.

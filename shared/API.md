@@ -75,10 +75,13 @@ or `{"account":"organizer"}`
   "user": {
     "id": "u-att-1",
     "name": "Demo Attendee",
-    "role": "attendee"
+    "role": "attendee",
+    "organizer_id": null
   }
 }
 ```
+
+`{"account":"organizer"}` instead returns `"role": "organizer", "organizer_id": "org-1"`.
 
 **Errors:**
 
@@ -86,7 +89,7 @@ or `{"account":"organizer"}`
 
 **Implementation:**
 
-Token must identify seeded user and role server-side; FE stores only for active demo session. No public signup in P0.
+Token must identify seeded user and role server-side; FE stores only for active demo session. No public signup in P0. `user.organizer_id` is the `Organizer` row's own id (not the same as `user.id`) and is present only when `role == "organizer"`; it is `null` for attendees. FE uses `organizer_id` — never `id` — to call `GET /api/organizers/{organizer_id}` or anything else keyed by organizer identity.
 
 Example: `POST /api/auth/demo-login` with `{"account":"attendee"}` → the 200 JSON above.
 
@@ -754,10 +757,13 @@ No path/query; body
   "user": {
     "id": "u-123",
     "name": "Real User",
-    "role": "attendee"
+    "role": "attendee",
+    "organizer_id": null
   }
 }
 ```
+
+Registering with `"role": "organizer"` also creates the matching `Organizer` row in the same transaction and returns its id as `user.organizer_id` (never `null` for an organizer account).
 
 **Errors:**
 
@@ -765,7 +771,7 @@ No path/query; body
 
 **Implementation:**
 
-Hash the password before storing; never return `password_hash` in any response. Role is fixed at signup and not changeable via this endpoint. Coexists with `demo-login`; does not replace it.
+Hash the password before storing; never return `password_hash` in any response. Role is fixed at signup and not changeable via this endpoint. Coexists with `demo-login`; does not replace it. See BE-API-001 for the `organizer_id` field rule.
 
 Example: `POST /api/auth/register` with body above → the 201 JSON above.
 
@@ -892,13 +898,78 @@ Same shape as BE-API-004, filtered/ordered accordingly
 
 **Errors:**
 
-401/422 unknown filter key or invalid combination; 409 `NEED_PROFILE_MISSING` if `sort=match_score` without a saved profile; 500 envelope
+401/422 unknown filter key or invalid combination; 403 if `sort=match_score` and bearer is not attendee; 409 `NEED_PROFILE_MISSING` if `sort=match_score` without a saved profile; 500 envelope
 
 **Implementation:**
 
-Attribute filters compare against stored `Claim` values only (`0`/`0.5`/`1`); a `null` claim never matches a required filter. `sort=match_score` reuses the BE-API-006 formula per event, not a separate calculation.
+Attribute filters compare against stored `Claim` values only (`0`/`0.5`/`1`); a `null` claim never matches a required filter — this is an **exact-match** filter (`elevator_or_ramp=1` keeps only events whose claim is exactly `1`), not a "greater than or equal" threshold. `date_from`/`date_to` bound `starts_at` inclusively as whole UTC days (`date_from` = `00:00:00Z`, `date_to` = `23:59:59Z` of that date); `date_from` after `date_to` is 422. Any query key outside this endpoint's known set (including a misspelled attribute name) is 422, per the global querystring convention. `sort=match_score` reuses the BE-API-006 formula per event, not a separate calculation, computed in application code since a score cannot be expressed as a SQL column — the full filtered set is ranked before `limit`/`offset` are applied; ties fall back to `starts_at ASC, id ASC`.
 
 Example: `GET /api/events?elevator_or_ramp=1&sort=match_score` → BE-API-004 shape filtered to events with `elevator_or_ramp` claim of `1`, ordered by match score.
+
+### BE-API-019 — Attendee dashboard summary
+
+**Status:** planned, not yet implemented (see BE-011).
+
+**Method/path/purpose:**
+
+`GET /api/me/dashboard` — one-call summary for the attendee home/dashboard screen: pending requests, the active upcoming event (if any), and recent request activity
+
+**Auth/headers:**
+
+Attendee bearer only; `Accept: application/json`
+
+**Path/query/body:**
+
+No path/query/body
+
+**200 response:**
+
+```json
+{
+  "pending_requests_count": 2,
+  "active_event": {
+    "request_id": "req-abc123",
+    "event": {
+      "id": "evt-upcoming-1",
+      "title": "Festival Akses Demo",
+      "starts_at": "2026-12-01T09:00:00+07:00",
+      "status": "upcoming",
+      "venue": {
+        "id": "v-demo-1",
+        "name": "Venue Demo Jakarta Pusat",
+        "city": "Jakarta",
+        "address": "Jakarta Pusat",
+        "lat": null,
+        "lng": null
+      },
+      "organizer": {
+        "id": "org-1",
+        "name": "Demo Organizer",
+        "reliability_score": 75,
+        "sample_count": 4
+      }
+    },
+    "match": {
+      "score": 78,
+      "weight_version": "provisional-v1",
+      "unknown_attributes": []
+    }
+  },
+  "recent_requests": []
+}
+```
+
+`active_event` is `null` when the attendee has no `confirmed` request against a still-`upcoming` event. `recent_requests` is up to 5 items in the same shape `GET /api/requests` already returns (BE-API-009), newest first.
+
+**Errors:**
+
+403 `FORBIDDEN` for an organizer bearer; common 401/500 envelope
+
+**Implementation:**
+
+`active_event` picks, among the attendee's `confirmed` requests, the one whose event is still `upcoming` with the soonest `starts_at`; a `confirmed` request whose event has since become `completed` is excluded here (it belongs to the verification flow, not "next event to attend"). Its `match` object reuses the BE-API-006 formula for that event and attendee — never a separate cross-event personal score; a client comparing this endpoint's `active_event.match.score` against calling BE-API-006 directly for the same event must get an identical value. This endpoint composes existing reads only; it introduces no new write path.
+
+Example: `GET /api/me/dashboard` with a saved attendee bearer that has one confirmed request on an upcoming event → the 200 JSON above.
 
 ## Contract verification
 
