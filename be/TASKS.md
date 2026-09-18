@@ -241,3 +241,245 @@ Repository for every task: **backend** (local project `../BE-EventEase/`; remote
 - calculation tests for full/partial/none and zero samples.
 - HTTP 201/401/403/409.
 - organizer profile before/after submission.
+
+## BE-006 — Real registration and login
+
+- **Branch:** `feature/BE-006-real-auth`
+- **Owner:** BE developer or AI agent
+- **Priority:** P1
+- **Dependencies:** BE-001 (HARD)
+- **Can run in parallel:** Yes, with BE-007/008/009/010
+
+**Goal:** allow real user signup/login alongside demo accounts.
+
+### Scope
+
+- registration (email + password) and role selection.
+- password hashing.
+- login endpoint issuing the same JWT shape as demo-login.
+- demo-login keeps working unchanged.
+
+### Outside scope
+
+- OAuth/social login, email verification, password reset, MFA.
+
+### Implementation steps
+
+1. add `password_hash` to the `User` model and migration.
+2. `POST /api/auth/register` with email/password/role validation and uniqueness check.
+3. `POST /api/auth/login` verifying the hash and issuing the standard bearer token.
+4. leave `/api/auth/demo-login` untouched.
+5. minimal brute-force guard is optional, not required.
+
+### API and context
+
+- BE-API-014, BE-API-015.
+
+### Acceptance criteria
+
+- a new account can register then log in.
+- wrong password returns 401.
+- duplicate email returns 409/422.
+- a real login token works on protected routes exactly like a demo token.
+
+### Definition of done
+
+- global DoD, passwords never logged or stored in plaintext, no secrets committed.
+
+### Verification
+
+- HTTP register/login success and failure cases.
+- confirm the stored value is a hash, not plaintext.
+- existing demo-login tests still pass.
+
+## BE-007 — Jakarta open data import
+
+- **Branch:** `feature/BE-007-dki-import`
+- **Owner:** BE developer or AI agent
+- **Priority:** P1
+- **Dependencies:** BE-002 (HARD)
+- **Can run in parallel:** Yes, with BE-006/008/009/010
+
+**Goal:** import a validated subset of DKI Jakarta open venue/event data with provenance.
+
+### Scope
+
+- fetch/parse a chosen DKI open-data source.
+- map fields to `Venue`/`Event`/`Claim`.
+- tag imported rows `source=open_data` with `checked_at`.
+- organizer/admin-triggered import endpoint.
+- idempotent re-run by external dataset ID.
+
+### Outside scope
+
+- automatic scheduling/cron, full dataset coverage, ML-based field mapping.
+
+### Implementation steps
+
+1. pick a concrete DKI dataset URL/format.
+2. write the mapping to `Venue`/`Event`/`Claim` shapes, `null` for unmapped fields.
+3. import endpoint (or CLI command) that triggers the run.
+4. dedupe by external ID on re-run.
+5. never guess an unmapped claim value.
+
+### API and context
+
+- BE-API-016.
+
+### Acceptance criteria
+
+- an import run creates venues/events with `source=open_data`.
+- re-running the same import does not duplicate rows.
+- unmapped fields are `null`, not guessed.
+
+### Definition of done
+
+- global DoD, provenance visible on every imported record.
+
+### Verification
+
+- import against a sample/mock dataset file.
+- run twice and confirm idempotency.
+- spot check one mapped and one unmapped field.
+
+## BE-008 — Venue coordinates
+
+- **Branch:** `feature/BE-008-venue-coordinates`
+- **Owner:** BE developer or AI agent
+- **Priority:** P2
+- **Dependencies:** BE-002 (HARD)
+- **Can run in parallel:** Yes, with BE-006/007/009/010
+
+**Goal:** let venues carry optional geographic coordinates for map rendering.
+
+### Scope
+
+- optional `lat`/`lng` columns on `Venue` plus migration.
+- accept optional coordinates on event creation (BE-API-007).
+- return coordinates in venue objects on BE-API-004/005/007 (`null` when absent).
+- range validation when present.
+
+### Outside scope
+
+- routing, distance calculation, live navigation.
+
+### Implementation steps
+
+1. migration adding nullable `lat`/`lng` columns.
+2. accept optional `lat`/`lng` on the `POST /api/events` venue payload.
+3. return `lat`/`lng` on venue objects across list/detail/create responses.
+4. validate `lat` in [-90,90] and `lng` in [-180,180] when present, else 422.
+
+### API and context
+
+- BE-API-004/005/007 venue coordinate extension in `../shared/API.md`.
+
+### Acceptance criteria
+
+- a venue with coordinates round-trips.
+- a venue without coordinates returns `null`, not an error.
+- an out-of-range coordinate returns 422.
+
+### Definition of done
+
+- global DoD, no coordinate ever fabricated for a venue that lacks real data.
+
+### Verification
+
+- HTTP create/read with and without coordinates.
+- invalid range rejected with 422.
+
+## BE-009 — Claim evidence media upload
+
+- **Branch:** `feature/BE-009-media-upload`
+- **Owner:** BE developer or AI agent
+- **Priority:** P2
+- **Dependencies:** BE-002 (HARD)
+- **Can run in parallel:** Yes, with BE-006/007/008/010
+
+**Goal:** let organizers attach photo evidence to accessibility claims.
+
+### Scope
+
+- multipart upload endpoint.
+- file storage behind a storage interface (local disk for demo, or object storage).
+- one-to-many media items per event.
+- media list surfaced in event detail.
+- content-type/size validation.
+
+### Outside scope
+
+- video, image moderation/ML content check, public unauthenticated access to raw files, editing existing media.
+
+### Implementation steps
+
+1. choose storage (local disk for demo, or S3-compatible) behind a storage interface.
+2. `POST /api/events/{event_id}/media` multipart endpoint, owning organizer only.
+3. persist media metadata (`url`, `uploaded_at`, uploader) linked to the event.
+4. include the `media` array in the BE-API-005 event detail response.
+5. validate content-type (image only) and max size.
+
+### API and context
+
+- BE-API-017; extends BE-API-005 response with a `media` array.
+
+### Acceptance criteria
+
+- an organizer uploads an image and it appears in event detail.
+- a non-owner upload is rejected with 403.
+- an oversized or wrong-type file is rejected with 422.
+
+### Definition of done
+
+- global DoD, an uploaded photo is never treated as an accessibility certification.
+
+### Verification
+
+- HTTP multipart upload success/failure cases.
+- event detail includes the media item after upload.
+
+## BE-010 — Advanced event search
+
+- **Branch:** `feature/BE-010-search-refinements`
+- **Owner:** BE developer or AI agent
+- **Priority:** P2
+- **Dependencies:** BE-003 (SOFT)
+- **Can run in parallel:** Yes, with BE-006/007/008/009
+
+**Goal:** let attendees find events matching more specific criteria than status/text.
+
+### Scope
+
+- extend `GET /api/events` with per-attribute claim filters.
+- `date_from`/`date_to` range.
+- `sort=starts_at|match_score`, the latter for authenticated attendees with a saved profile.
+
+### Outside scope
+
+- full-text relevance ranking, saved searches, notifications on new matches.
+
+### Implementation steps
+
+1. add optional query params (need-attribute filters, `date_from`, `date_to`, `sort`).
+2. apply claim-based filtering server-side.
+3. compute match score for sorting only when the request has an attendee bearer with a saved profile; otherwise fall back to `starts_at`.
+4. an unsupported filter combination returns 422, not 500.
+
+### API and context
+
+- BE-API-018 (extends BE-API-004).
+
+### Acceptance criteria
+
+- filtering by a required attribute excludes events whose claim is `0` or `null` for that attribute.
+- `sort=match_score` orders by the BE-API-006 formula.
+- an invalid combination returns 422 with the contract error envelope.
+
+### Definition of done
+
+- global DoD, a filter never approximates what an `unknown` claim cannot support.
+
+### Verification
+
+- HTTP query combinations.
+- ordering assertions against known seeded claims.

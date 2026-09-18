@@ -245,3 +245,191 @@ Repository for every task: **frontend** (URL `NEEDS DECISION`). Each task is one
 ### Verification
 
 - fixture 201/409/401 cases, keyboard path, later INT-004 real API end-to-end smoke.
+
+## FE-006 — Real register/login UI
+
+- **Branch:** `feature/FE-006-real-auth`
+- **Owner:** FE developer or AI agent
+- **Priority:** P1
+- **Dependencies:** FE-001 (HARD); BE-006 (SOFT)
+- **Can run in parallel:** Yes, with BE-006 and other FE page tasks
+
+**Goal:** let real users sign up/log in alongside the demo entry.
+
+### Scope
+
+- register form (email/password/name/role).
+- login form.
+- inline error display.
+- demo entry buttons remain unchanged.
+
+### Outside scope
+
+- OAuth buttons, password reset UI, backend validation logic.
+
+### Implementation steps
+
+1. add register/login routes and forms.
+2. call BE-API-014/015 via the existing API adapter.
+3. reuse session/token storage from FE-001.
+4. surface duplicate-email/invalid-credential errors inline.
+5. mirror the contract in the fixture adapter until BE is ready.
+
+### API and context
+
+- BE-API-014, BE-API-015.
+
+### Acceptance criteria
+
+- a new account can register, then log in, and reach role-appropriate navigation.
+- a wrong password shows an inline error.
+- the demo entry still works unchanged.
+
+### Definition of done
+
+- global DoD, password field masked and never logged to console.
+
+### Verification
+
+- fixture success/error paths.
+- keyboard navigation on the new forms.
+- later real API smoke.
+
+## FE-007 — Venue map rendering
+
+- **Branch:** `feature/FE-007-venue-map`
+- **Owner:** FE developer or AI agent
+- **Priority:** P2
+- **Dependencies:** FE-001 (HARD); BE-008 (SOFT)
+- **Can run in parallel:** Yes, with BE-008 and other FE page tasks
+
+**Goal:** show venue location on a map when coordinates are available.
+
+### Scope
+
+- map component on event detail rendering a single pin when `venue.lat`/`lng` are present.
+- fallback to the existing address text when coordinates are absent.
+
+### Outside scope
+
+- routing/directions, multi-venue map, live navigation, geolocation of the user.
+
+### Implementation steps
+
+1. pick a lightweight map library compatible with the existing stack.
+2. render a pin from `venue.lat`/`lng` on event detail.
+3. fall back to plain address text when coordinates are `null`.
+4. skip the map component entirely when BE never returns coordinates, so nothing looks broken.
+
+### API and context
+
+- BE-API-005 venue coordinate extension.
+
+### Acceptance criteria
+
+- an event with coordinates shows a pin at the correct location.
+- an event without coordinates shows address text with no broken map.
+- no console errors when coordinates are absent.
+
+### Definition of done
+
+- global DoD, no coordinate ever fabricated on the FE side.
+
+### Verification
+
+- fixtures with and without coordinates.
+- manual check of pin placement for a known Jakarta address.
+
+## FE-008 — Claim evidence media UI
+
+- **Branch:** `feature/FE-008-media-upload`
+- **Owner:** FE developer or AI agent
+- **Priority:** P2
+- **Dependencies:** FE-003 (HARD); BE-009 (SOFT)
+- **Can run in parallel:** Yes, with BE-009 and other FE page tasks
+
+**Goal:** let organizers attach and attendees view claim evidence photos.
+
+### Scope
+
+- multi-image upload control on the organizer event form.
+- thumbnail gallery on event detail.
+- upload progress/error state.
+
+### Outside scope
+
+- image editing/cropping, video, moderation UI.
+
+### Implementation steps
+
+1. add a multi-file input to the organizer event form.
+2. call BE-API-017 per file with progress feedback.
+3. render the returned `media` array as a gallery on event detail.
+4. show a rejected upload's reason without losing the other selected files.
+
+### API and context
+
+- BE-API-017; BE-API-005 `media` array.
+
+### Acceptance criteria
+
+- an organizer uploads one or more images and sees them on the saved event.
+- an attendee sees the same gallery on event detail.
+- a rejected upload shows its reason.
+
+### Definition of done
+
+- global DoD, the gallery never implies certification of accuracy.
+
+### Verification
+
+- fixture upload success/error cases.
+- gallery renders the expected number of images.
+- keyboard access and alt text on gallery items.
+
+## FE-009 — Advanced search/filter UI
+
+- **Branch:** `feature/FE-009-search-refinements`
+- **Owner:** FE developer or AI agent
+- **Priority:** P2
+- **Dependencies:** FE-002 (HARD); BE-010 (SOFT)
+- **Can run in parallel:** Yes, with BE-010 and other FE page tasks
+
+**Goal:** let attendees narrow event discovery beyond basic text/status.
+
+### Scope
+
+- filter controls for specific accessibility attributes.
+- date range picker.
+- sort selector (date vs. match score).
+
+### Outside scope
+
+- saved searches, search-based notifications, FE-side score calculation.
+
+### Implementation steps
+
+1. add filter/sort controls to the event list page.
+2. map UI state to BE-API-018 query params.
+3. call the adapter and render filtered/sorted results.
+4. show an empty state distinct from loading/error.
+
+### API and context
+
+- BE-API-018.
+
+### Acceptance criteria
+
+- applying a required-attribute filter removes non-matching fixture events.
+- sorting by match score reorders the list.
+- an invalid combination surfaces the server's 422 message.
+
+### Definition of done
+
+- global DoD, filters never silently drop results without explanation.
+
+### Verification
+
+- fixture filter/sort combinations.
+- keyboard operation of the controls.
+- later real API smoke.

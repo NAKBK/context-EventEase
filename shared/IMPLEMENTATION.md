@@ -61,3 +61,17 @@ FE-002/003/004/005 and BE-002/003/004/005 can progress in parallel where `API.md
 | 2h | Freeze features, use known-good seed/reset, run smoke and rehearsal, prepare local demo fallback. | All feature development except a blocker fix needed to make the core flow run. |
 
 If an external service fails, switch to the reviewed seed and checklist. If deployment fails, demonstrate a documented local FE+BE setup with the same contract and seed. Never fabricate a successful external import or independent accessibility verification.
+
+## Phase 2 backlog (post-P0)
+
+These tasks extend the product after the P0 Need→Match→Commit→Verify loop is stable and demoable, per the priority table in `PROJECT.md`. They are not part of the 24-hour critical path above and must not delay it.
+
+| ID | Title | Priority | Depends on |
+| --- | --- | --- | --- |
+| BE-006 / FE-006 | Real registration and login | P1 | BE-001 / FE-001 |
+| BE-007 | Jakarta open data import | P1 | BE-002 |
+| BE-008 / FE-007 | Venue coordinates and map rendering | P2 | BE-002 / FE-001 |
+| BE-009 / FE-008 | Claim evidence media upload | P2 | BE-002 / FE-003 |
+| BE-010 / FE-009 | Advanced event search | P2 | BE-003 / FE-002 |
+
+Full scope, acceptance criteria, and API contracts are in `be/TASKS.md`, `fe/TASKS.md`, and `shared/API.md` (BE-API-014–018). Notifications remain undocumented by user decision; revisit only after this backlog.

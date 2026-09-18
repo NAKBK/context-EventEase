@@ -4,7 +4,7 @@ This is the **shared wire source of truth** for the hackathon. All paths are rel
 
 ## Global conventions
 
-- IDs are opaque strings. Times are ISO 8601 with timezone (example `2026-09-18T09:00:00+07:00`). Scores are integer 0–100 or `null` when there is no evidence. Coordinates are optional and are not needed for P0.
+- IDs are opaque strings. Times are ISO 8601 with timezone (example `2026-09-18T09:00:00+07:00`). Scores are integer 0–100 or `null` when there is no evidence. Coordinates (`lat`/`lng` on `venue`) are optional and were not needed for P0; BE-008/FE-007 (P2) add them for map rendering, still nullable.
 - All endpoints except login require `Authorization: Bearer <demo_token>`; BE checks `attendee` or `organizer` role and object ownership. The latest user decision uses a signed JWT for this bearer token. Demo users are seeded server-side; this endpoint does not use passwords. Real-user auth is `NEEDS DECISION`.
 - All errors use `{"error":{"code":"VALIDATION_ERROR","message":"...","details":{}}}`. `details` may be `{}`. Common statuses: 400 malformed JSON, 401 missing/invalid token, 403 wrong role or owner, 404 unknown resource, 409 invalid transition/duplicate, 422 semantic validation, 500 unexpected failure. Never return stack traces or sensitive notes in errors.
 - `null` means an organizer claim is unknown. Six facility claims accept exactly `0`, `0.5`, `1`, or `null`. `walking_distance_m` is a nonnegative integer or `null`. Need-profile booleans express required/not required, not medical conditions.
@@ -188,7 +188,9 @@ No path/body; optional `status=upcoming|completed`, `q` text (max 100 chars), `l
       "venue": {
         "id": "v-1",
         "name": "Venue Demo Jakarta",
-        "city": "Jakarta"
+        "city": "Jakarta",
+        "lat": null,
+        "lng": null
       },
       "organizer": {
         "id": "org-1",
@@ -210,7 +212,7 @@ No path/body; optional `status=upcoming|completed`, `q` text (max 100 chars), `l
 
 **Implementation:**
 
-Sort by start time, then ID. Scores require BE-API-006; FE may call it for visible cards.
+Sort by start time, then ID. Scores require BE-API-006; FE may call it for visible cards. `venue.lat`/`venue.lng` are `null` until BE-008 lands; see BE-API-018 for filter/sort extensions.
 
 Example: `GET /api/events?status=upcoming&limit=20&offset=0` → the 200 JSON above.
 
@@ -242,7 +244,9 @@ Either role bearer; `Accept: application/json`
     "id": "v-1",
     "name": "Venue Demo Jakarta",
     "city": "Jakarta",
-    "address": "Jakarta, Indonesia"
+    "address": "Jakarta, Indonesia",
+    "lat": null,
+    "lng": null
   },
   "organizer": {
     "id": "org-1",
@@ -260,7 +264,8 @@ Either role bearer; `Accept: application/json`
     "walking_distance_m": 180,
     "source": "demo",
     "checked_at": "2026-09-17T10:00:00+07:00"
-  }
+  },
+  "media": []
 }
 ```
 
@@ -270,7 +275,7 @@ Either role bearer; `Accept: application/json`
 
 **Implementation:**
 
-Show claim source/date. `reliability_score:null` if zero samples.
+Show claim source/date. `reliability_score:null` if zero samples. `venue.lat`/`venue.lng` are `null` until BE-008 lands. `media` is `[]` until BE-009 lands; each item has the BE-API-017 shape.
 
 Example: `GET /api/events/evt-1` → the 200 JSON above.
 
@@ -386,7 +391,9 @@ No path/query;
   "venue": {
     "name": "Venue Demo Jakarta",
     "city": "Jakarta",
-    "address": "Jakarta, Indonesia"
+    "address": "Jakarta, Indonesia",
+    "lat": null,
+    "lng": null
   },
   "claim": {
     "step_free_entrance": 1,
@@ -408,11 +415,11 @@ Same event shape as BE-API-005, with generated IDs and organizer set from token
 
 **Errors:**
 
-401/403/422 invalid dates/claim/outside supported city, 500 envelope
+401/403/422 invalid dates/claim/outside supported city/out-of-range coordinate, 500 envelope
 
 **Implementation:**
 
-BE sets owner and status from timestamps; never trust a body-supplied organizer ID. `source` must be `organizer` for this endpoint; BE may set checked time itself.
+BE sets owner and status from timestamps; never trust a body-supplied organizer ID. `source` must be `organizer` for this endpoint; BE may set checked time itself. `venue.lat`/`venue.lng` are optional (BE-008); when present, validate `lat` in [-90,90] and `lng` in [-180,180], else 422.
 
 Example: `POST /api/events` with body above → 201 body shaped exactly as BE-API-005.
 
@@ -715,6 +722,183 @@ Either role bearer; `Accept: application/json`
 With no verification: `score:null,sample_count:0,updated_at:null`; display count and demo provenance; no implied certification.
 
 Example: `GET /api/organizers/org-1` → the 200 JSON above.
+
+### BE-API-014 — Register
+
+**Method/path/purpose:**
+
+`POST /api/auth/register` — create a real attendee/organizer account
+
+**Auth/headers:**
+
+Public; `Content-Type: application/json`
+
+**Path/query/body:**
+
+No path/query; body
+
+```json
+{
+  "email": "user@example.com",
+  "password": "at-least-8-chars",
+  "name": "Real User",
+  "role": "attendee"
+}
+```
+
+**201 response:**
+
+```json
+{
+  "token": "jwt-token",
+  "user": {
+    "id": "u-123",
+    "name": "Real User",
+    "role": "attendee"
+  }
+}
+```
+
+**Errors:**
+
+409 `EMAIL_TAKEN`; 422 invalid email/weak password/invalid role; 500 envelope
+
+**Implementation:**
+
+Hash the password before storing; never return `password_hash` in any response. Role is fixed at signup and not changeable via this endpoint. Coexists with `demo-login`; does not replace it.
+
+Example: `POST /api/auth/register` with body above → the 201 JSON above.
+
+### BE-API-015 — Login
+
+**Method/path/purpose:**
+
+`POST /api/auth/login` — authenticate a real account
+
+**Auth/headers:**
+
+Public; `Content-Type: application/json`
+
+**Path/query/body:**
+
+No path/query; body
+
+```json
+{
+  "email": "user@example.com",
+  "password": "at-least-8-chars"
+}
+```
+
+**200 response:**
+
+Same `TokenResponse` shape as BE-API-001/014
+
+**Errors:**
+
+401 `INVALID_CREDENTIALS`; 422 malformed body; 500 envelope
+
+**Implementation:**
+
+Issues the same JWT shape/claims as demo-login so existing bearer checks are unchanged. Do not reveal whether the email or the password was wrong.
+
+Example: `POST /api/auth/login` with body above → the 200 `TokenResponse`.
+
+### BE-API-016 — Jakarta open data import
+
+**Method/path/purpose:**
+
+`POST /api/admin/import/dki-open-data` — import a validated, mapped subset of DKI Jakarta open venue/event data
+
+**Auth/headers:**
+
+Organizer or admin bearer (exact role `NEEDS DECISION`); `Content-Type: application/json`
+
+**Path/query/body:**
+
+No path; optional body `{"dataset_url": "..."}` to override the default source
+
+**202 response:**
+
+```json
+{
+  "import_id": "imp-1",
+  "status": "queued"
+}
+```
+
+**Errors:**
+
+401/403; 422 unreachable or malformed source; 500 envelope
+
+**Implementation:**
+
+Imported venues/events/claims get `source="open_data"`. Unmapped claim fields stay `null`, never guessed. Re-running an import is idempotent per external dataset ID; manual seed remains the fallback if the import fails.
+
+Example: `POST /api/admin/import/dki-open-data` with an empty body → the 202 JSON above.
+
+### BE-API-017 — Upload claim evidence
+
+**Method/path/purpose:**
+
+`POST /api/events/{event_id}/media` — attach one photo as accessibility claim evidence
+
+**Auth/headers:**
+
+Owning organizer bearer; `Content-Type: multipart/form-data`
+
+**Path/query/body:**
+
+`event_id` string; multipart field `file` (image only, max size `NEEDS DECISION`, e.g. 5MB)
+
+**201 response:**
+
+```json
+{
+  "id": "media-1",
+  "event_id": "evt-1",
+  "url": "https://.../media-1.jpg",
+  "uploaded_at": "2026-09-18T09:00:00+07:00"
+}
+```
+
+**Errors:**
+
+401/403 non-owner; 404 event; 422 wrong content-type or oversized file; 500 envelope
+
+**Implementation:**
+
+Store the file outside the JSON payload (object storage or local disk behind a URL); return only a fetchable URL, never raw bytes. `GET /api/events/{event_id}` (BE-API-005) includes a `media` array of this shape, default `[]`. A photo is evidence, not certification.
+
+Example: `POST /api/events/evt-1/media` with a JPEG file → the 201 JSON above.
+
+### BE-API-018 — Advanced event search
+
+**Method/path/purpose:**
+
+`GET /api/events` (extended) — filter/sort beyond status and free text
+
+**Auth/headers:**
+
+Either role bearer; `Accept: application/json`
+
+**Path/query/body:**
+
+No path/body; adds to BE-API-004's query: any need-attribute key (e.g. `elevator_or_ramp=1`) to require that claim value, `date_from`/`date_to` (ISO date), `sort=starts_at|match_score` (default `starts_at`); `sort=match_score` requires attendee bearer with a saved need profile
+
+**200 response:**
+
+Same shape as BE-API-004, filtered/ordered accordingly
+
+**Errors:**
+
+401/422 unknown filter key or invalid combination; 409 `NEED_PROFILE_MISSING` if `sort=match_score` without a saved profile; 500 envelope
+
+**Implementation:**
+
+Attribute filters compare against stored `Claim` values only (`0`/`0.5`/`1`); a `null` claim never matches a required filter. `sort=match_score` reuses the BE-API-006 formula per event, not a separate calculation.
+
+Example: `GET /api/events?elevator_or_ramp=1&sort=match_score` → BE-API-004 shape filtered to events with `elevator_or_ramp` claim of `1`, ordered by match score.
 
 ## Contract verification
 
